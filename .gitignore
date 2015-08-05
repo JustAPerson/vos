@@ -1,3 +1,5 @@
 .cs_files
 .cs_workspaces
 bin/
+target/
+*.sw*
