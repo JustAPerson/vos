@@ -116,31 +116,28 @@ impl Config {
 
         let mut disk = RamDisk::new(sectors);
 
-        let mut i = 0;
+        let mut bs_i = 0; // also use index to count size of bootmanager
         loop {
             let mut sector: [u8; 512] = [0; 512];
             match self.boot.read(&mut sector) {
-                // Ok(n) if n == 512 => { }, // read sector fine
-                // Ok(n) if n < 512  => { break; } // finished reading bootloader
                 Ok(0) => { break; }
                 Ok(n) => { }
                 Err(e) => { panic!("Unable to read bootloader `{}`: {}", self.out_path.display(), e); },
-                // _ => unreachable!(),
             }
-            disk.write_sector(i, &sector);
-            i += 1;
+            disk.write_sector(bs_i, &sector);
+            bs_i += 1;
         }
 
 
         let pinfo = PartitionInfo {
             format: Format::Fat32,
-            size: sectors - 64,
-            start: 64, // historically, partitions are aligned to cylinder boundaries, so start on sector 64
+            size: sectors - bs_i,
+            start: bs_i,
             bootable: true,
         };
         disk::set_pinfo(&mut disk, 0, &pinfo).unwrap();
 
-        {
+        { // borrowck strikes again!
             let mut partition = disk::get_partition(&mut disk, 0).unwrap();
             fs::fat::format(&mut partition).unwrap();
         }
