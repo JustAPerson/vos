@@ -14,9 +14,25 @@
 ; necessary to find and boot a kernel from within the filesystem.
 
 BITS 16 ; execution begins in real mode
-ORG 0x7C00 ; bootsector is loaded at 0x0000:0x7c00
+
+; bootsector is loaded at 0x0000:0x7c00
+; but it will relocate and execute from 0x0000:0x0600
+ORG 0x0600
 
 stage1:
+	; because the volume bootloader must be read to 0x7c00
+	; relocate this code to 0x0600, then jmp to it
+	mov cx, 0x200
+.relocate:
+	mov al, [0x7c00 + ecx]
+	mov [0x0600 + ecx], al
+	loop .relocate
+
+	; absolute jmp is easier than trying encode the proper relative jmp
+	mov ax, .moved
+	jmp ax
+
+.moved:
 	; BIOS tells us what drive we booted from, save that value
 	mov [drive_number], dl
 
@@ -101,10 +117,11 @@ LBA_Packet:
 	db 16 ; constant size
 	db 0  ; unspecified
 LBA_Packet.sectors: dw 1
-LBA_Packet.buffer:  dd 0x7e00
+LBA_Packet.buffer:  dd 0x0800
 LBA_Packet.start:   dd 1
 	dd 0 ; used for 48bit LBA indexing
 
+partition: dd 0
 drive_number: db 0
 times (510 - 64) - ($ - $$) db 0
 partition_table: times 64 db 0
@@ -118,7 +135,26 @@ stage2:
 
 	mov si, .message.hello
 	call print_stringln
-	jmp exit
+
+	; save partition LBA offset
+	mov eax, [partition_table + 8]
+	mov [partition], eax
+
+	; prepare LBA read request
+	mov word   [LBA_Packet.sectors], 1
+	mov dword  [LBA_Packet.buffer], 0x7c00
+	mov dword  [LBA_Packet.start], eax
+
+	; read volume bootloader
+	mov ah, 0x42 ; read LBA
+	mov si, LBA_Packet
+	mov dl, [drive_number]
+	int 0x13 ; BIOS mass storage
+	jc exit ; TODO error handling
+
+	; jmp to loaded volume bootloader code
+	mov ax, 0x7c00
+	jmp ax
 
 stage2.message.entry: db "Now in stage two.", 0
 stage2.message.hello: db "Hello, world!", 0

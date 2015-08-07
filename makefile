@@ -6,9 +6,10 @@ clean:
 	rm -rf bin/
 
 build: bin bin/vos.bin
-bin/vos.bin: bin/boot/alpha.bin bin/util/mkdisk bin/fs/
-	./bin/util/mkdisk -b bin/boot/alpha.bin -o bin/vos.bin bin/fs/
 
+bin/vos.bin: bin/boot/alpha.bin bin/boot/beta.bin bin/util/mkdisk bin/fs/
+	./bin/util/mkdisk -b bin/boot/alpha.bin -v bin/boot/beta.bin \
+		              -o bin/vos.bin bin/fs/
 
 bin/boot/%.bin: src/boot/%.s
 	nasm -f bin $< -o $@

@@ -26,9 +26,10 @@ Creates a bootable disk image.
 Options:
     -h, --help     Print this help message
     -v, --version  Print the version of mkdisk
-    -s, --size=SIZE         The fixed size of the disk image [default: 4MiB]
-    -o, --out=FILE          The output disk image file
-    -b, --bootloader=FILE   The bootloader to use for the first few sectors
+    -s, --size=SIZE           The fixed size of the disk image [default: 4MiB]
+    -o, --out=FILE            The output disk image file
+    -b, --bootloader=FILE     The master bootloader to use for the first few sectors
+    -v, --volume-loader=FILE  The volume bootloader to use for the partition
 
 File sizes measured using KB = 1000, KiB=1024 etc
 ";
@@ -54,6 +55,9 @@ struct Config {
     boot_path: PathBuf,
     boot: File,
 
+    voot_path: PathBuf,
+    voot: File,
+
     out_path: PathBuf,
     out: File,
 }
@@ -64,13 +68,23 @@ impl Config {
         let dsize = parse_size(args.get_str("-s"));
 
         let boot_path: PathBuf = match args.get_str("-b") {
-            ""   => panic!("Bootloader unspecified: use `-b` or `--bootloader`"),
+            ""   => panic!("Master bootloader unspecified: use `-b` or `--bootloader`"),
             path => {
                 path.into()
             },
         };
         let boot = File::open(&boot_path)
-                        .unwrap_or_else(|e| panic!("Unable to open bootloader `{}`: {}",
+                        .unwrap_or_else(|e| panic!("Unable to open master bootloader `{}`: {}",
+                                                   args.get_str("-b"), e));
+
+        let voot_path: PathBuf = match args.get_str("-v") {
+            ""   => panic!("Volume bootloader unspecified: use `-v` or `--volume-loader`"),
+            path => {
+                path.into()
+            },
+        };
+        let voot = File::open(&voot_path)
+                        .unwrap_or_else(|e| panic!("Unable to open volume bootloader `{}`: {}",
                                                    args.get_str("-b"), e));
 
         let src = args.get_str("<dir>").into();
@@ -94,13 +108,16 @@ impl Config {
             boot_path: boot_path,
             boot: boot,
 
+            voot_path: voot_path,
+            voot: voot,
+
             out_path: out_path,
             out: out,
         }
     }
 
     pub fn exec(&mut self) {
-        use std::io::Read;
+        use std::io::{Read, Seek};
         use std::ops::Deref;
 
         let smeta = ::std::fs::metadata(&self.src)
@@ -122,7 +139,7 @@ impl Config {
             match self.boot.read(&mut sector) {
                 Ok(0) => { break; }
                 Ok(n) => { }
-                Err(e) => { panic!("Unable to read bootloader `{}`: {}", self.out_path.display(), e); },
+                Err(e) => { panic!("Unable to read global bootloader `{}`: {}", self.out_path.display(), e); },
             }
             disk.write_sector(bs_i, &sector);
             bs_i += 1;
@@ -137,9 +154,56 @@ impl Config {
         };
         disk::set_pinfo(&mut disk, 0, &pinfo).unwrap();
 
+        // TODO: refactor
         { // borrowck strikes again!
             let mut partition = disk::get_partition(&mut disk, 0).unwrap();
             fs::fat::format(&mut partition).unwrap();
+
+            // TODO: support something other than FAT32
+            let mut vbr = *partition.read_sector(0).unwrap();
+
+            // Volume Boot Record
+            //
+            // This sector contains the information necessary to boot a
+            // partition which includes a filesystem. The filesystem header
+            // occupies some of sector, but after it is the volume bootloader.
+            //
+            // The volume bootloader is entirely stored in one file,
+            // but the first stage of it must be separated from the rest.
+            // The first stage is placed in the Volume Boot Record after the
+            // filesystem header.
+            //
+            // All of the contents of the volume bootloader file after the
+            // first 512 bytes is placed in a reserved section of the
+            // filesystem.
+
+
+            // Read and offset first stage of volume bootloader
+            self.voot.read(&mut vbr).unwrap(); // TODO: error handling
+
+            // manually encode a jmp instruction
+            vbr[0] = 0xEB; // relative jmp
+            vbr[1] = 90 - 2; // jmp over filesystem header
+            vbr[2] = 0x90; // NOP
+
+            assert!(vbr[510] == 0x55, "Invalid volume bootloader signature");
+            assert!(vbr[511] == 0xAA, "Invalid volume bootloader signature");
+
+            partition.write_sector(0, &vbr).unwrap();
+
+            // Read stage two of volume boot loader
+            let mut i = 1; // skip first sector which has stage1
+            loop {
+                let mut sector: [u8; 512] = [0; 512];
+                match self.boot.read(&mut sector) {
+                    Ok(0) => { break; }
+                    Ok(n) => { }
+                    Err(e) => { panic!("Unable to read volume bootloader `{}`: {}", self.out_path.display(), e); },
+                }
+                partition.write_sector(i, &sector);
+                i += 1;
+            }
+
         }
 
 
