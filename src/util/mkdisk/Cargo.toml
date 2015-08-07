@@ -8,3 +8,6 @@ docopt = "0.6"
 byteorder = "0.3"
 env_logger = "0.3"
 log = "0.3"
+
+[dependencies.disk]
+path = "../../lib/disk/"

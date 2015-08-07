@@ -3,6 +3,7 @@ name = "mkdisk"
 version = "0.1.0"
 dependencies = [
  "byteorder 0.3.11 (registry+https://github.com/rust-lang/crates.io-index)",
+ "disk 0.1.0",
  "docopt 0.6.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -20,6 +21,14 @@ dependencies = [
 name = "byteorder"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "disk"
+version = "0.1.0"
+dependencies = [
+ "byteorder 0.3.11 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "docopt"

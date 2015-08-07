@@ -9,12 +9,11 @@ extern crate docopt;
 extern crate env_logger;
 #[macro_use] extern crate log;
 
+extern crate disk;
+
 use docopt::Docopt;
 
-mod disk;
-mod fs;
 
-use fs::*;
 use disk::*;
 
 static VERSION: &'static str = "0.0.1";
