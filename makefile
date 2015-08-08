@@ -11,8 +11,16 @@ bin/vos.bin: bin/boot/alpha.bin bin/boot/beta.bin bin/util/mkdisk bin/fs/
 	./bin/util/mkdisk -b bin/boot/alpha.bin -v bin/boot/beta.bin \
 		              -o bin/vos.bin bin/fs/
 
-bin/boot/%.bin: src/boot/%.s
+bin/boot/alpha.bin: src/boot/alpha.s
 	nasm -f bin $< -o $@
+
+bin/boot/beta.bin: bin/boot/beta.o bin/boot/gamma.o
+	ld -T src/boot/gamma.ld -Lbin/boot/ -o $@
+
+bin/boot/beta.o: src/boot/beta.s
+	nasm -f elf32 -o $@ $<
+bin/boot/gamma.o: src/boot/gamma.rs
+	rustc --target etc/targets/real.json -C opt-level=2 -o $@ $<
 
 ROPT = -C opt-level=2
 RFLAGS = $(RTARGET) $(ROPT) $(REXTERN)

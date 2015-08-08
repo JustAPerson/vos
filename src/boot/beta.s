@@ -1,7 +1,8 @@
 BITS 16 ; execution begins in real mode
 
+extern rust_boot
 ; bootsector is loaded at 0x0000:0x7c00
-ORG 0x7C00
+section beta
 
 ; File system header contents go hear
 ; `mkdisk` will provide the proper values
@@ -11,10 +12,20 @@ stage1:
 	mov si, .message
 	call print_stringln
 
-	jmp exit
+	mov eax, [0x0600 + 446 + 8]
+	add eax, 1
+	mov [LBA_Packet.start], eax
+
+	mov ah, 0x42 ; read LBA
+	mov si, LBA_Packet
+	mov dl, 0x80 ; TODO drive number
+	int 0x13 ; BIOS mass storage
+	jc exit ; TODO error handling
+
+	jmp rust_boot
 
 
-print_string:
+print_stringln:
 	mov ah, 0x0E
 	mov bh, 0x00
 	mov bl, 0x07
@@ -24,22 +35,10 @@ print_string:
 	int 0x10
 	or al, al
 	jnz .loop
-	ret
 
-print_stringln:
-	call print_string
-
-	; get cursor position
-	mov ah, 0x03 ; get cursor
-	mov bh, 0x00 ; page 0
-	int 0x10 ; BIOS video
-	; dh = row, dl = col
-
-	; move cursor to line below
-	inc dh ; increment row
-	xor dl, dl ; reset column
-	mov ah, 0x02 ; set cursor
-	; bh = page (0x00)
+	mov al, 0x0a
+	int 0x10
+	mov al, 0x0d
 	int 0x10
 	ret
 
@@ -49,6 +48,14 @@ exit:
 	jmp exit
 
 stage1.message: db "Hiya, https://livecoding.tv/", 0
+
+LBA_Packet:
+	db 16 ; constant size
+	db 0  ; unspecified
+LBA_Packet.sectors: dw 4
+LBA_Packet.buffer:  dd 0x7e00
+LBA_Packet.start:   dd 1
+	dd 0 ; used for 48bit LBA indexing
 
 times (510) - ($ - $$) db 0
 
