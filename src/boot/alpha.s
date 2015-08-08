@@ -111,7 +111,7 @@ exit:
 	jmp exit
 
 unsupported_bios.message: db "Unsupported BIOS", 0
-stage1.message: db "Leaving stage one.", 0
+stage1.message: db "master bootmanager stage1", 0
 
 LBA_Packet:
 	db 16 ; constant size
@@ -131,9 +131,6 @@ dw 0xAA55
 
 stage2:
 	mov si, .message.entry
-	call print_stringln
-
-	mov si, .message.hello
 	call print_stringln
 
 	; save partition LBA offset
@@ -156,5 +153,4 @@ stage2:
 	mov ax, 0x7c00
 	jmp ax
 
-stage2.message.entry: db "Now in stage two.", 0
-stage2.message.hello: db "Hello, world!", 0
+stage2.message.entry: db "master bootmanager stage2", 0

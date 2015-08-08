@@ -47,7 +47,7 @@ exit:
 	hlt
 	jmp exit
 
-stage1.message: db "Hiya, https://livecoding.tv/", 0
+stage1.message: db "volume bootloader stage1", 0
 
 LBA_Packet:
 	db 16 ; constant size
