@@ -67,43 +67,26 @@ stage1:
 	jmp stage2
 
 
-print_char:
-	; al should have the char to print
+print_stringln:
 	mov ah, 0x0E
 	mov bh, 0x00
 	mov bl, 0x07
-	int 0x10
-	ret
-
-print_string:
 .loop:
 	mov al, [si]
 	inc si
-	call print_char
+	int 0x10
 	or al, al
 	jnz .loop
-	ret
 
-print_stringln:
-	call print_string
-
-	; get cursor position
-	mov ah, 0x03 ; get cursor
-	mov bh, 0x00 ; page 0
-	int 0x10 ; BIOS video
-	; dh = row, dl = col
-
-	; move cursor to line below
-	inc dh ; increment row
-	xor dl, dl ; reset column
-	mov ah, 0x02 ; set cursor
-	; bh = page (0x00)
+	mov al, 0x0a
+	int 0x10
+	mov al, 0x0d
 	int 0x10
 	ret
 
 unsupported_bios:
 	mov si, .message
-	call print_string
+	call print_stringln
 	; fall through
 exit:
 	cli
