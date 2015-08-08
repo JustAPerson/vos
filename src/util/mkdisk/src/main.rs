@@ -138,7 +138,7 @@ impl Config {
             match self.boot.read(&mut sector) {
                 Ok(0) => { break; }
                 Ok(n) => { }
-                Err(e) => { panic!("Unable to read global bootloader `{}`: {}", self.out_path.display(), e); },
+                Err(e) => { panic!("Unable to read global bootloader `{}`: {}", self.boot_path.display(), e); },
             }
             disk.write_sector(bs_i, &sector);
             bs_i += 1;
@@ -194,15 +194,14 @@ impl Config {
             let mut i = 1; // skip first sector which has stage1
             loop {
                 let mut sector: [u8; 512] = [0; 512];
-                match self.boot.read(&mut sector) {
+                match self.voot.read(&mut sector) {
                     Ok(0) => { break; }
                     Ok(n) => { }
-                    Err(e) => { panic!("Unable to read volume bootloader `{}`: {}", self.out_path.display(), e); },
+                    Err(e) => { panic!("Unable to read volume bootloader `{}`: {}", self.voot_path.display(), e); },
                 }
                 partition.write_sector(i, &sector);
                 i += 1;
             }
-
         }
 
 
