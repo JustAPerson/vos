@@ -1,0 +1,6 @@
+[submodule "src/rust"]
+	path = src/rust
+	url = git@github.com:rust-lang/rust.git
+[submodule "src/lib/rlibc"]
+	path = src/lib/rlibc
+	url = git@github.com:rust-lang/rlibc.git
