@@ -1,0 +1,12 @@
+{
+	"data-layout":               "e-S32-p:32:32:32",
+	"dynamic-linking-available": false,
+	"split-stacks-supported":    false,
+	"llvm-target":               "i686-none-elf",
+	"relocation-model":          "static",
+	"no-redzone":                true,
+	"target-endian":             "little",
+	"target-pointer-width":      "32",
+	"arch":                      "x86",
+	"os":                        "none"
+}
