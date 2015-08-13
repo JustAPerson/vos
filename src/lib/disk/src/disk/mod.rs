@@ -1,12 +1,17 @@
 use std::path::PathBuf;
 
 pub mod sector;
-pub mod ramdisk;
-
 pub use disk::sector::{Sector, EMPTY_SECTOR};
+
+#[cfg(not(feature="bootdriver"))]
+pub mod ramdisk;
+#[cfg(not(feature="bootdriver"))]
 pub use disk::ramdisk::RamDisk;
 
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+mod biosdisk;
+pub use self::biosdisk::BiosDisk;
+
+use byteorder::{ReadBytesExt, WriteBytesExt};
 use fs::{Fat32, FileSystem};
 
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -121,8 +126,8 @@ pub fn get_pinfo<T: Disk>(disk: &T, index: usize) -> Result<Option<PartitionInfo
     };
 
     let bootable = entry[0] >= 0x80;
-    let start = (&entry[8..12]).read_u32::<LittleEndian>().unwrap();
-    let size = (&entry[12..16]).read_u32::<LittleEndian>().unwrap();
+    let start = (&entry[8..12]).read_le_u32().unwrap();
+    let size = (&entry[12..16]).read_le_u32().unwrap();
 
     let pinfo = PartitionInfo {
         format: format,
@@ -152,8 +157,8 @@ pub fn set_pinfo<T: Disk>(disk: &mut T, index: usize, pinfo: &PartitionInfo) -> 
         entry[0] = if pinfo.bootable { 0x80 } else { 0x00 };
         entry[4] = pinfo.format.serialize();
         // TODO: unwrap or look at implementation. Shouldn't fail for &[u8]?
-        (&mut entry[8..12]).write_u32::<LittleEndian>(pinfo.start as u32);
-        (&mut entry[12..16]).write_u32::<LittleEndian>(pinfo.size as u32);
+        (&mut entry[8..12]).write_le_u32(pinfo.start as u32);
+        (&mut entry[12..16]).write_le_u32(pinfo.size as u32);
     }
 
     try!(disk.write_sector(0, &mbr));

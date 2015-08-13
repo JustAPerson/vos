@@ -3,6 +3,13 @@ name = "disk"
 version = "0.1.0"
 authors = ["Jason Priest <jpriest128@gmail.com>"]
 
-[dependencies]
-log = "0.3"
-byteorder = "*"
+[features]
+default = ["bootdriver"]
+bootdriver = []
+general = ["log"]
+
+[dependencies.log]
+version = "0.3"
+optional = true
+
+

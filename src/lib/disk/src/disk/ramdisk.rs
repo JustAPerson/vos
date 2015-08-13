@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
 use disk::{Sector, EMPTY_SECTOR, Disk, DiskInfo, Error, Result};
-use byteorder::{LittleEndian, WriteBytesExt};
+use byteorder::{WriteBytesExt};
 
 pub struct RamDisk {
     sectors: Vec<Sector>,
@@ -20,7 +20,7 @@ impl RamDisk {
             sectors.push(EMPTY_SECTOR.clone());
         }
 
-        (&mut sectors[0][510..512]).write_u16::<LittleEndian>(0xAA55).unwrap();
+        (&mut sectors[0][510..512]).write_le_u16(0xAA55).unwrap();
 
         RamDisk { sectors: sectors }
     }

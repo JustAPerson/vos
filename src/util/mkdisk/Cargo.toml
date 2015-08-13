@@ -10,4 +10,9 @@ env_logger = "0.3"
 log = "0.3"
 
 [dependencies.disk]
+default-features = false
 path = "../../lib/disk/"
+
+
+[features]
+default = ["disk/general"]

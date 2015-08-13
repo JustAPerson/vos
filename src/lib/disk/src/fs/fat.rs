@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{ReadBytesExt, WriteBytesExt};
 
-use disk::{Disk, Sector, EMPTY_SECTOR, Result, Error};
+use disk::{BiosDisk, Disk, Sector, EMPTY_SECTOR, Result, Error};
 use fs::FileSystem;
 
 pub struct Fat32 {
@@ -82,16 +82,17 @@ impl DirEntry {
 }
 
 impl Fat32 {
+    // #[cfg(not(feature="bootdriver"))]
     pub fn new(disk: Box<Disk>) -> Result<Fat32> {
         let fat_begin;
         let cluster_begin;
 
         {
             let header = try!(disk.read_sector(0));
-            fat_begin = (&header[14..16]).read_u16::<LittleEndian>().unwrap() as usize;
+            fat_begin = (&header[14..16]).read_le_u16().unwrap() as usize;
 
             let fats = (&header[16..17]).read_u8().unwrap() as usize;
-            let fsize = (&header[36..40]).read_u32::<LittleEndian>().unwrap() as usize;
+            let fsize = (&header[36..40]).read_le_u32().unwrap() as usize;
             cluster_begin = fat_begin + fats*fsize;
         }
 
@@ -127,7 +128,7 @@ impl Fat32 {
 
         let fat_sector = try!(self.disk.read_sector(lba));
         const MASK: u32 = 0x0fffffff;
-        let entry = MASK & (&fat_sector[offset..offset+4]).read_u32::<LittleEndian>().unwrap();
+        let entry = MASK & (&fat_sector[offset..offset+4]).read_le_u32().unwrap();
 
         debug!("read_fate cluster=0x{:x} lba=0x{:x} offset=0x{:x} entry=0x{:x}", c, lba, offset, entry);
 
@@ -162,7 +163,7 @@ impl Fat32 {
         let offset = c % 128;
 
         let mut fat_sector = try!(self.disk.read_sector(lba)).clone();
-        (&mut fat_sector[offset..offset+4]).write_u32::<LittleEndian>(entry).unwrap();
+        (&mut fat_sector[offset..offset+4]).write_le_u32(entry).unwrap();
         try!(self.disk.write_sector(lba, &fat_sector));
 
         Ok(())
@@ -355,28 +356,28 @@ impl Fat32 {
             _ => { },
         }
 
-        let name = String::from_utf8_lossy(&entry[0..8]);
-        let ext = String::from_utf8_lossy(&entry[8..11]);
+        let name = &entry[0..8];
+        let ext = &entry[8..11];
 
         let attrib = entry[11];
 
-        let cluster_hi = (&entry[20..22]).read_u16::<LittleEndian>().unwrap() as usize;
-        let cluster_lo = (&entry[26..28]).read_u16::<LittleEndian>().unwrap() as usize;
+        let cluster_hi = (&entry[20..22]).read_le_u16().unwrap() as usize;
+        let cluster_lo = (&entry[26..28]).read_le_u16().unwrap() as usize;
         let cluster = cluster_hi << 16 | cluster_lo;
 
         if attrib & IS_SUBDIR > 0 {
             // subdirectory
             Ok(DirEntry::Dir {
-                name: name.into_owned(),
-                ext: ext.into_owned(),
+                name: String::from_utf8(name.to_owned()).unwrap(),
+                ext: String::from_utf8(ext.to_owned()).unwrap(),
                 start: cluster,
             })
         } else {
             // file
-            let size = (&entry[28..32]).read_u32::<LittleEndian>().unwrap() as usize;
+            let size = (&entry[28..32]).read_le_u32().unwrap() as usize;
             Ok(DirEntry::File {
-                name: name.into_owned(),
-                ext: ext.into_owned(),
+                name: String::from_utf8(name.to_owned()).unwrap(),
+                ext: String::from_utf8(ext.to_owned()).unwrap(),
                 start: cluster,
                 size: size,
             })
@@ -427,12 +428,12 @@ impl Fat32 {
                     let cluster_hi = (cluster & 0xFFFF0000) >> 16;
                     let cluster_lo =  cluster & 0x0000FFFF;
                     debug!("set_dire cluster=0x{:x} hi=0x{:x} lo=0x{:x}", cluster, cluster_hi, cluster_lo);
-                    (&mut entry[20..22]).write_u16::<LittleEndian>(cluster_hi as u16).unwrap();
-                    (&mut entry[26..28]).write_u16::<LittleEndian>(cluster_lo as u16).unwrap();
+                    (&mut entry[20..22]).write_le_u16(cluster_hi as u16).unwrap();
+                    (&mut entry[26..28]).write_le_u16(cluster_lo as u16).unwrap();
 
                     if let DirEntry::File { size, .. } = *dire {
                         // File also specifies a filesize
-                        (&mut entry[28..32]).write_u32::<LittleEndian>(size as u32).unwrap();
+                        (&mut entry[28..32]).write_le_u32(size as u32).unwrap();
                     }
                 }
             }
@@ -555,8 +556,54 @@ impl FileSystem for Fat32 {
 
         Ok(())
     }
-    fn read_file(&mut self, path: &Path, buf: &mut [u8]) -> Result<()> {
-        Ok(())
+
+    fn read_file(&mut self, path: &Path) -> Result<Vec<u8>> {
+        use std::iter::repeat;
+
+        // find the directory and where the file exists within it
+        let dcluster = try!(self.find_parent_dir(path));
+        let (direi, mut fcluster) = match try!(self.find_dire_index(dcluster, path)) {
+            // File exists, overwriting
+            Some(i) => {
+                // unwrap() should be safe, see Fat32::find_dire_cluster()
+                (i, try!(self.get_dire(dcluster, i)).start().unwrap())
+            },
+            // File does not exist
+            None => {
+                return Err(Error::Nonexistent(path.to_owned()));
+            }
+        };
+
+        let dire = try!(self.get_dire(dcluster, direi));
+        let size = match dire.size() {
+            Some(s) => s,
+            // Path is not a file
+            None => {
+                return Err(Error::InvalidPath);
+            }
+        };
+        let mut contents = Vec::with_capacity(size);
+
+        // TODO analize safety of size() and start() here
+        let mut fcluster = dire.start().unwrap();
+        loop {
+            let cluster = try!(self.read_cluster(fcluster));
+
+            // TODO refactor
+            for i in 0..512 {
+                contents.push(cluster[i]);
+            }
+
+            fcluster = match try!(self.next_cluster(fcluster)) {
+                Some(c) => c,
+                None => {
+                    // At end of file
+                    break;
+                }
+            }
+        }
+
+        Ok(contents)
     }
 }
 
@@ -601,13 +648,13 @@ pub fn format<T: Disk>(disk: &mut T) -> Result<()> {
     let (fsize, csize) = calc_sizes(dsize, FATS, RESERVED);
 
     let mut header = Sector([0; 512]);
-    let _ = (&mut header[11..13]).write_u16::<LittleEndian>(SSIZE as u16); // bytes per sector
+    let _ = (&mut header[11..13]).write_le_u16(SSIZE as u16); // bytes per sector
     let _ = (&mut header[13..14]).write_u8(CSIZE as u8); // sector per cluster
-    let _ = (&mut header[14..16]).write_u16::<LittleEndian>(RESERVED as u16); // reserved sectors
+    let _ = (&mut header[14..16]).write_le_u16(RESERVED as u16); // reserved sectors
     let _ = (&mut header[16..17]).write_u8(FATS as u8); // number of FATs
-    let _ = (&mut header[19..21]).write_u16::<LittleEndian>(0); // FAT16: total sectors
-    let _ = (&mut header[32..36]).write_u32::<LittleEndian>(dsize as u32); // FAT32: total sectors
-    let _ = (&mut header[36..40]).write_u32::<LittleEndian>(fsize as u32); // Size of FAT in sectors
+    let _ = (&mut header[19..21]).write_le_u16(0); // FAT16: total sectors
+    let _ = (&mut header[32..36]).write_le_u32(dsize as u32); // FAT32: total sectors
+    let _ = (&mut header[36..40]).write_le_u32(fsize as u32); // Size of FAT in sectors
     try!(disk.write_sector(0, &header));
 
     // zero out reserved sectors
@@ -625,9 +672,9 @@ pub fn format<T: Disk>(disk: &mut T) -> Result<()> {
         // 0x00000000 means free
         // 0x00000001 is reserved
         // so these cluster addresses cannot be used
-        (&mut sector[0..4]).write_u32::<LittleEndian>(0x00000001).unwrap();
-        (&mut sector[4..8]).write_u32::<LittleEndian>(0x00000001).unwrap();
-        (&mut sector[8..12]).write_u32::<LittleEndian>(0x0FFFFFFF).unwrap(); // signal end of root dir
+        (&mut sector[0..4]).write_le_u32(0x00000001).unwrap();
+        (&mut sector[4..8]).write_le_u32(0x00000001).unwrap();
+        (&mut sector[8..12]).write_le_u32(0x0FFFFFFF).unwrap(); // signal end of root dir
         try!(disk.write_sector(fat_start, &sector));
 
         for j in 1..fsize {
