@@ -2,6 +2,9 @@
 run: build
 	qemu-system-i386 bin/vos.bin
 
+debug: build
+	qemu-system-i386 bin/vos.bin -s -S
+
 clean:
 	rm -rf bin/
 
