@@ -1,8 +1,7 @@
 BITS 16 ; execution begins in real mode
 
-extern rust_boot
 ; bootsector is loaded at 0x0000:0x7c00
-section beta
+section beta vstart=0x7c00
 
 ; File system header contents go hear
 ; `mkdisk` will provide the proper values
@@ -22,7 +21,7 @@ stage1:
 	int 0x13 ; BIOS mass storage
 	jc exit ; TODO error handling
 
-	jmp rust_boot
+	jmp stage2
 
 
 print_stringln:
@@ -61,3 +60,11 @@ times (510) - ($ - $$) db 0
 
 ; Magic number used by BIOS to recognize a valid bootsector
 dw 0xAA55
+
+stage2:
+	mov si, .message
+	call print_stringln
+
+	jmp exit
+
+stage2.message: db "volume bootloader stage2", 0
