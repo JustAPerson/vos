@@ -17,7 +17,7 @@ BITS 16 ; execution begins in real mode
 
 ; bootsector is loaded at 0x0000:0x7c00
 ; but it will relocate and execute from 0x0000:0x0600
-ORG 0x0600
+section alpha vstart=0x0600
 
 stage1:
 	; because the volume bootloader must be read to 0x7c00
@@ -90,8 +90,9 @@ unsupported_bios:
 	; fall through
 exit:
 	cli
+.loop
 	hlt
-	jmp exit
+	jmp .loop
 
 unsupported_bios.message: db "Unsupported BIOS", 0
 stage1.message: db "master bootmanager stage1", 0
@@ -113,7 +114,7 @@ partition_table: times 64 db 0
 dw 0xAA55
 
 stage2:
-	mov si, .message.entry
+	mov si, .message
 	call print_stringln
 
 	; save partition LBA offset
@@ -136,4 +137,4 @@ stage2:
 	mov ax, 0x7c00
 	jmp ax
 
-stage2.message.entry: db "master bootmanager stage2", 0
+stage2.message: db "master bootmanager stage2", 0

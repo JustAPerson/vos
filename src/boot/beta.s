@@ -43,8 +43,9 @@ print_stringln:
 
 exit:
 	cli
+.loop
 	hlt
-	jmp exit
+	jmp .loop
 
 stage1.message: db "volume bootloader stage1", 0
 
