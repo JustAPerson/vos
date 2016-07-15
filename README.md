@@ -1,5 +1,7 @@
 # Prerequisites
 
+[![Join the chat at https://gitter.im/JustAPerson/vos](https://badges.gitter.im/JustAPerson/vos.svg)](https://gitter.im/JustAPerson/vos?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 * [Rust nightly](http://www.rust-lang.org/)
 * [binutils](http://www.gnu.org/software/binutils/)
 * [qemu](http://wiki.qemu.org/Main_Page)
